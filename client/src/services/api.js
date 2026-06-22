@@ -1,13 +1,19 @@
 import axios from 'axios';
 
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  'https://ai-resume-analyser-production-41a6.up.railway.app/api';
+
+console.log('API URL:', API_URL);
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: API_URL,
   headers: {
-    'Content-Type': 'application/json'
-  }
+    'Content-Type': 'application/json',
+  },
 });
 
-// Add JWT token automatically
+// Automatically attach JWT token
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
