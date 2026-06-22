@@ -185,29 +185,57 @@ export const matchJobDescription = async (req, res) => {
  */
 export const generateSuggestions = async (req, res) => {
   try {
-    const resume = await verifyResumeOwnership(req.params.id, req.user._id);
+    const resume = await verifyResumeOwnership(
+      req.params.id,
+      req.user._id
+    );
 
-    // Cache check: if suggestions exist, return them
+    // Return cached suggestions if already generated
     if (resume.suggestions && resume.suggestions.length > 0) {
       console.log('Returning cached suggestions for resume:', resume._id);
       return res.json(resume.suggestions);
     }
 
-    // Pass the saved job description if present to context-aware suggestion generator
-    const prompt = getSuggestionsPrompt(resume.rawText, resume.jobDescription);
-    console.log('Sending suggestions generation request to AI for resume:', resume._id);
-    const result = await getAIJSONCompletion(prompt, JSON_SYSTEM_INSTRUCTION);
+    const prompt = getSuggestionsPrompt(
+      resume.rawText,
+      resume.jobDescription
+    );
 
-    resume.suggestions = result.suggestions || [];
-    await resume.save();
+    console.log(
+      'Sending suggestions generation request to AI for resume:',
+      resume._id
+    );
 
-    return res.json(resume.suggestions);
+    const result = await getAIJSONCompletion(
+      prompt,
+      JSON_SYSTEM_INSTRUCTION
+    );
+
+    const suggestions = result.suggestions || [];
+
+    // Update directly in MongoDB to avoid VersionError
+    await Resume.findByIdAndUpdate(
+      resume._id,
+      {
+        $set: {
+          suggestions: suggestions
+        }
+      },
+      {
+        new: true
+      }
+    );
+
+    return res.json(suggestions);
+
   } catch (error) {
     console.error('Suggestions generation error:', error);
-    return res.status(500).json({ message: error.message || 'Suggestions generation failed' });
+
+    return res.status(500).json({
+      message: error.message || 'Suggestions generation failed'
+    });
   }
 };
-
 /**
  * @desc Get all user resumes (history list)
  * @route GET /api/resume/history
@@ -216,15 +244,17 @@ export const generateSuggestions = async (req, res) => {
 export const getHistory = async (req, res) => {
   try {
     const resumes = await Resume.find({ userId: req.user._id })
-      .select('-rawText') // Exclude raw text for dashboard performance listing
+      .select('-rawText')
       .sort({ createdAt: -1 });
+
     return res.json(resumes);
   } catch (error) {
     console.error('Get history error:', error);
-    return res.status(500).json({ message: 'Failed to fetch resume history' });
+    return res.status(500).json({
+      message: 'Failed to fetch resume history'
+    });
   }
 };
-
 /**
  * @desc Get detailed resume by ID
  * @route GET /api/resume/:id
