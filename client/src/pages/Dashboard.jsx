@@ -18,87 +18,92 @@ const Dashboard = () => {
   const [extracting, setExtracting] = useState(false);
   const [scoring, setScoring] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
-
 const fetchAnalysisFlow = async () => {
+try {
+setLoading(true);
+setError('');
+
+
+// Fetch resume
+setStatusText('Fetching uploaded resume document...');
+const resumeRes = await api.get(`/resume/${id}`);
+
+const currentResume = resumeRes.data;
+
+setResume(currentResume);
+setLoading(false);
+
+// STEP 1: Extract Skills
+if (!currentResume.skills || currentResume.skills.length === 0) {
+  setExtracting(true);
+
   try {
-    setLoading(true);
-    setError('');
+    const res = await api.post(`/resume/${id}/extract`);
 
-    // Fetch resume
-    setStatusText('Fetching uploaded resume document...');
-    const resumeRes = await api.get(`/resume/${id}`);
+    setResume(prev => ({
+      ...prev,
+      ...res.data
+    }));
+  } catch (err) {
+    console.error('Skill extraction error:', err);
+  } finally {
+    setExtracting(false);
+  }
+}
 
-    const currentResume = resumeRes.data;
+// STEP 2: ATS Score
+if (!currentResume.atsScore || currentResume.atsScore === 0) {
+  setScoring(true);
 
-    setResume(currentResume);
-    setLoading(false);
+  try {
+    const res = await api.post(`/resume/${id}/ats-score`);
 
-    // STEP 1: Extract Skills
-    if (!currentResume.skills || currentResume.skills.length === 0) {
-      setExtracting(true);
+    setResume(prev => ({
+      ...prev,
+      atsScore: res.data.score,
+      atsBreakdown: res.data.breakdown
+    }));
+  } catch (err) {
+    console.error('ATS scoring error:', err);
+  } finally {
+    setScoring(false);
+  }
+}
 
-      try {
-        const res = await api.post(`/resume/${id}/extract`);
+// STEP 3: Suggestions
+if (!currentResume.suggestions || currentResume.suggestions.length === 0) {
+  setSuggesting(true);
 
-        setResume(prev => ({
-          ...prev,
-          ...res.data
-        }));
-      } catch (err) {
-        console.error('Skill extraction error:', err);
-      } finally {
-        setExtracting(false);
-      }
-    }
+  try {
+    await api.post(`/resume/${id}/suggestions`);
 
-    // STEP 2: ATS Score
-    if (!currentResume.atsScore || currentResume.atsScore === 0) {
-      setScoring(true);
+    // Reload updated resume from database
+    const updatedResume = await api.get(`/resume/${id}`);
 
-      try {
-        const res = await api.post(`/resume/${id}/ats-score`);
-
-        setResume(prev => ({
-          ...prev,
-          atsScore: res.data.score,
-          atsBreakdown: res.data.breakdown
-        }));
-      } catch (err) {
-        console.error('ATS scoring error:', err);
-      } finally {
-        setScoring(false);
-      }
-    }
-
-    // STEP 3: Suggestions
-    if (!currentResume.suggestions || currentResume.suggestions.length === 0) {
-      setSuggesting(true);
-
-      try {
-        const res = await api.post(`/resume/${id}/suggestions`);
-
-        setResume(prev => ({
-          ...prev,
-          suggestions: res.data
-        }));
-      } catch (err) {
-        console.error('Suggestions generation error:', err);
-      } finally {
-        setSuggesting(false);
-      }
-    }
+    setResume(updatedResume.data);
 
   } catch (err) {
-    console.error(err);
-
-    setError(
-      err.response?.data?.message ||
-      'Error occurred during resume analysis.'
-    );
-
-    setLoading(false);
+    console.error('Suggestions generation error:', err);
+  } finally {
+    setSuggesting(false);
   }
+}
+
+
+} catch (err) {
+console.error(err);
+
+
+setError(
+  err.response?.data?.message ||
+  'Error occurred during resume analysis.'
+);
+
+setLoading(false);
+
+}
 };
+
   useEffect(() => {
     fetchAnalysisFlow();
   }, [id]);
